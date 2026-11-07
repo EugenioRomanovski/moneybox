@@ -70,12 +70,21 @@ const num = (v) => Number(v) || 0;
  *
  * If tracking started in the middle of the period (`trackingSince`), only the share of money
  * for the remaining days is budgeted and the days before are skipped.
+ *
+ * `carryIn` is what is left over (or overspent, negative) from the previous period; it is added
+ * to this period's budget and spread over its days.
+ *
+ * Monthly incomes and recurring payments created after the period ended are ignored, so that
+ * past periods are not recalculated with money that appeared later.
  */
 export function computeBudget({
   today, startDay = 1, incomes = [], recurring = [], expenses = [],
-  mode = 'next_day', trackingSince = null,
+  mode = 'next_day', trackingSince = null, carryIn = 0,
 }) {
   const period = periodFor(today, startDay);
+  const existed = (x) => !x.created_at || x.created_at.slice(0, 10) < period.end;
+  incomes = incomes.filter(existed);
+  recurring = recurring.filter(existed);
 
   const monthlyIncome = incomes.filter((i) => i.kind !== 'once').reduce((s, i) => s + num(i.amount), 0);
   const onceIncome = incomes
@@ -88,7 +97,7 @@ export function computeBudget({
   let first = period.start;
   if (trackingSince && trackingSince > period.start && trackingSince < period.end) first = trackingSince;
   const days = daysBetween(first, period.end);
-  const budgeted = available * (days / period.days);
+  const budgeted = available * (days / period.days) + carryIn;
 
   const spentByDay = new Map();
   for (const e of expenses) {
@@ -133,6 +142,7 @@ export function computeBudget({
     income,
     fixed,
     available,
+    carryIn,
     budgeted,
     dailyBase: budgeted / days,
     spentTotal,
@@ -142,4 +152,38 @@ export function computeBudget({
     tomorrow: tomorrowRow,
     list,
   };
+}
+
+/**
+ * Chain budget periods from the start of tracking up to `today`.
+ *
+ * `monthMode` decides what happens to the money left at the end of a period:
+ *   - 'carry'   — the leftover (or overspend) becomes `carryIn` of the next period;
+ *   - 'savings' — the leftover is added to `savings`, every period starts from scratch.
+ *
+ * Returns the current period, the previous one (for history) and the savings total.
+ */
+export function computeMonths({ today, startDay = 1, trackingSince = null, monthMode = 'carry', ...rest }) {
+  const current = periodFor(today, startDay);
+  const firstStart = trackingSince && trackingSince < current.start ? periodFor(trackingSince, startDay).start : current.start;
+
+  const past = [];
+  let p = current;
+  while (p.start > firstStart && past.length < 240) {
+    p = periodFor(addDays(p.start, -1), startDay);
+    past.unshift(p);
+  }
+
+  let carry = 0;
+  let savings = 0;
+  const closed = [];
+  for (const q of past) {
+    const b = computeBudget({ ...rest, today: addDays(q.end, -1), startDay, trackingSince, carryIn: monthMode === 'carry' ? carry : 0 });
+    if (monthMode === 'carry') carry = b.leftTotal;
+    else savings += b.leftTotal;
+    closed.push(b);
+  }
+
+  const budget = computeBudget({ ...rest, today, startDay, trackingSince, carryIn: monthMode === 'carry' ? carry : 0 });
+  return { budget, previous: closed[closed.length - 1] || null, savings, closed };
 }

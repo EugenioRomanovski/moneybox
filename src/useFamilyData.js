@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, q } from './supabase.js';
 import { addDays, periodFor } from './lib/budget.js';
 
-const EMPTY = { incomes: [], recurring: [], paid: [], expenses: [], members: [] };
+const EMPTY = { incomes: [], recurring: [], paid: [], expenses: [], members: [], dailyTotals: [], since: null };
 const cacheKey = (fid) => `moneybox-data-${fid}`;
 
 function readCache(fid) {
@@ -22,16 +22,19 @@ export function useFamilyData(family, today) {
     // current + previous budget period (for history)
     const since = addDays(periodFor(today, family.period_start_day).start, -40);
     try {
-      const [incomes, recurring, paid, expenses, members] = await Promise.all([
+      const [incomes, recurring, paid, expenses, members, dailyTotals] = await Promise.all([
         q(supabase.from('mb_incomes').select('*').order('created_at')),
         q(supabase.from('mb_recurring').select('*').order('day_of_month').order('created_at')),
         q(supabase.from('mb_recurring_paid').select('*').gte('period_start', since)),
         q(supabase.from('mb_expenses').select('*').gte('spent_on', since)
           .order('spent_on', { ascending: false }).order('created_at', { ascending: false }).limit(5000)),
         q(supabase.rpc('mb_family_members')),
+        // older days only as per-day sums: enough to chain budget periods from the start of tracking
+        q(supabase.from('mb_daily_totals').select('spent_on,amount').lt('spent_on', since).order('spent_on').limit(10000))
+          .catch(() => []),
       ]);
       if (my !== seq.current) return;
-      const next = { incomes, recurring, paid, expenses, members };
+      const next = { incomes, recurring, paid, expenses, members, dailyTotals, since };
       setData(next);
       setError(null);
       try { localStorage.setItem(cacheKey(fid), JSON.stringify(next)); } catch { /* quota */ }

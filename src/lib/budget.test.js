@@ -66,3 +66,52 @@ test('one-off income only counts inside the period', () => {
   });
   assert.equal(b.income, 103000);
 });
+
+import { computeMonths } from './budget.js';
+
+const chain = {
+  startDay: 1,
+  trackingSince: '2026-10-01',
+  incomes: [{ amount: 100000, kind: 'monthly', created_at: '2026-10-01T10:00:00Z' }],
+  recurring: [{ amount: 38000, active: true, created_at: '2026-10-01T10:00:00Z' }],
+  // October: 31 days × 2000 = 62000 budget, spent 50000 → 12000 left
+  expenses: [{ amount: 50000, spent_on: '2026-10-10' }],
+};
+
+test('month leftover is carried into the next month by default', () => {
+  const m = computeMonths({ ...chain, today: '2026-11-01' });
+  assert.equal(m.previous.leftTotal, 12000);
+  assert.equal(m.budget.carryIn, 12000);
+  assert.equal(m.budget.budgeted, 62000 + 12000);
+  assert.equal(m.budget.dailyBase, 74000 / 30);
+  assert.equal(m.savings, 0);
+});
+
+test('month leftover goes to savings in savings mode', () => {
+  const m = computeMonths({ ...chain, monthMode: 'savings', today: '2026-11-01' });
+  assert.equal(m.budget.carryIn, 0);
+  assert.equal(m.budget.dailyBase, 62000 / 30);
+  assert.equal(m.savings, 12000);
+});
+
+test('month overspend is carried as a negative balance', () => {
+  const m = computeMonths({ ...chain, expenses: [{ amount: 70000, spent_on: '2026-10-10' }], today: '2026-11-15' });
+  assert.equal(m.budget.carryIn, -8000);
+  assert.equal(m.budget.budgeted, 62000 - 8000);
+});
+
+test('carry accumulates over several months', () => {
+  const m = computeMonths({ ...chain, today: '2026-12-05' });
+  // Oct +12000 → Nov budget 62000+12000, nothing spent → +74000 into December
+  assert.equal(m.closed.length, 2);
+  assert.equal(m.budget.carryIn, 74000);
+});
+
+test('incomes added later do not rewrite past months', () => {
+  const m = computeMonths({
+    ...chain, today: '2026-11-01',
+    incomes: [...chain.incomes, { amount: 31000, kind: 'monthly', created_at: '2026-11-01T09:00:00Z' }],
+  });
+  assert.equal(m.previous.income, 100000);
+  assert.equal(m.budget.income, 131000);
+});

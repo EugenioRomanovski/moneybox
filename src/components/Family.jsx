@@ -145,8 +145,18 @@ export default function Family({ family, members, user, profileName, onFamily, o
           <Segmented value={family.overspend_mode} onChange={(v) => update({ p_overspend_mode: v })}
             options={[{ value: 'next_day', label: 'Вычесть из завтра' }, { value: 'spread', label: 'Растянуть на период' }]} />
         </div>
+        <div className="row plain" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div className="title">Остаток в конце месяца</div>
+          <Segmented value={family.month_leftover_mode || 'carry'} onChange={(v) => update({ p_month_leftover_mode: v })}
+            options={[{ value: 'carry', label: 'Переносить' }, { value: 'savings', label: 'В копилку' }]} />
+        </div>
       </div>
-      <p className="footnote">Неистраченный остаток дня всегда переходит на следующий день. Перерасход можно вычесть целиком из завтрашнего лимита или распределить по оставшимся дням.</p>
+      <p className="footnote">
+        Неистраченный остаток дня всегда переходит на следующий день. Перерасход можно вычесть целиком из завтрашнего лимита или распределить по оставшимся дням.
+        {' '}{(family.month_leftover_mode || 'carry') === 'carry'
+          ? 'Остаток месяца добавится к бюджету следующего и распределится по его дням (перерасход — вычтется).'
+          : 'Остаток месяца уйдёт в копилку, а следующий месяц начнётся с нуля (перерасход вычитается из копилки).'}
+      </p>
 
       <div className="section-title"><span>Аккаунт</span></div>
       <div className="list glass">

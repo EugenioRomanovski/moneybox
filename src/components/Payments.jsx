@@ -1,7 +1,7 @@
 import { money, floorMoney, dayLong, dayShortFmt, plural } from '../lib/format.js';
 import { dueDateInPeriod, daysBetween } from '../lib/budget.js';
 
-export default function Payments({ budget, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid }) {
+export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid }) {
   const period = budget.period;
   const paidSet = new Set(paid.filter((p) => p.period_start === period.start).map((p) => p.recurring_id));
   const active = recurring.filter((r) => r.active);
@@ -32,10 +32,22 @@ export default function Payments({ budget, incomes, recurring, paid, currency, t
       <div className="summary">
         <div className="tile glass"><div className="k">Доходы</div><div className="v pos">{money(budget.income, currency)}</div></div>
         <div className="tile glass"><div className="k">Обязательные</div><div className="v">{money(fixedSum, currency)}</div></div>
+        {monthMode === 'carry' && Math.abs(budget.carryIn) >= 1 && (
+          <div className="tile glass wide">
+            <div className="k">С прошлого месяца</div>
+            <div className={`v ${budget.carryIn > 0 ? 'pos' : 'neg'}`}>{money(Math.round(budget.carryIn), currency, { sign: true })}</div>
+          </div>
+        )}
+        {monthMode === 'savings' && (
+          <div className="tile glass wide">
+            <div className="k">🐷 Копилка</div>
+            <div className={`v ${savings < 0 ? 'neg' : 'pos'}`}>{money(Math.round(savings), currency)}</div>
+          </div>
+        )}
         <div className="tile glass wide">
           <div>
             <div className="k">Свободно на период</div>
-            <div className={`v ${budget.available < 0 ? 'neg' : ''}`}>{floorMoney(budget.available, currency)}</div>
+            <div className={`v ${budget.budgeted < 0 ? 'neg' : ''}`}>{floorMoney(budget.budgeted, currency)}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="k">В день</div>
@@ -44,8 +56,11 @@ export default function Payments({ budget, incomes, recurring, paid, currency, t
         </div>
       </div>
       <p className="footnote">
-        (Доходы − обязательные платежи) ÷ {budget.period.days} {plural(budget.period.days, 'день', 'дня', 'дней')} периода = базовый лимит в день.
+        (Доходы − обязательные платежи{monthMode === 'carry' ? ' ± остаток прошлого месяца' : ''}) ÷ {budget.days} {plural(budget.days, 'день', 'дня', 'дней')} периода = базовый лимит в день.
         {budget.first !== period.start && ' В первом периоде учитываются дни с начала ведения учёта.'}
+        {monthMode === 'carry'
+          ? ' Остаток в конце месяца перейдёт в следующий.'
+          : ' Остаток в конце месяца уйдёт в копилку, следующий месяц начнётся с нуля.'}
       </p>
 
       <div className="section-title">

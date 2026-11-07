@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, q, errorText } from './supabase.js';
 import { useFamilyData } from './useFamilyData.js';
-import { computeBudget, addDays, iso } from './lib/budget.js';
+import { computeMonths, iso } from './lib/budget.js';
 import { today as todayISO } from './lib/format.js';
 import { ToastProvider, useToast } from './components/ui.jsx';
 import { IconToday, IconHistory, IconRepeat, IconFamily, IconPlus } from './components/icons.jsx';
@@ -90,20 +90,18 @@ function Main({ user }) {
   const { data, ready, reload, setData } = useFamilyData(family, today);
 
   const trackingSince = family?.created_at ? iso(new Date(family.created_at)) : null;
-  const budget = useMemo(() => family && computeBudget({
+  // spending per day: exact expenses for recent days, server-side daily sums for older ones
+  const daySums = useMemo(() => {
+    const old = data.since ? (data.dailyTotals || []).filter((d) => d.spent_on < data.since) : [];
+    return [...old, ...data.expenses];
+  }, [data]);
+  const months = useMemo(() => family && computeMonths({
     today, startDay: family.period_start_day, mode: family.overspend_mode, trackingSince,
-    incomes: data.incomes, recurring: data.recurring, expenses: data.expenses,
-  }), [family, today, data, trackingSince]);
-
-  const previous = useMemo(() => {
-    if (!family || !budget) return null;
-    const lastDay = addDays(budget.period.start, -1);
-    if (trackingSince && lastDay < trackingSince) return null;
-    return computeBudget({
-      today: lastDay, startDay: family.period_start_day, mode: family.overspend_mode, trackingSince,
-      incomes: data.incomes, recurring: data.recurring, expenses: data.expenses,
-    });
-  }, [family, budget, data, trackingSince]);
+    monthMode: family.month_leftover_mode || 'carry',
+    incomes: data.incomes, recurring: data.recurring, expenses: daySums,
+  }), [family, today, data, daySums, trackingSince]);
+  const budget = months?.budget;
+  const previous = months?.previous;
 
   if (!family) {
     return familyError
@@ -168,14 +166,14 @@ function Main({ user }) {
       {!ready ? <Loader /> : (
         <>
           {tab === 'today' && (
-            <Today budget={budget} expenses={data.expenses} currency={currency} members={members} familyName={family.name}
+            <Today budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} familyName={family.name}
               onAdd={() => openExpense()} onEdit={openExpense} goPayments={() => setTab('payments')} />
           )}
           {tab === 'history' && (
-            <History current={budget} previous={previous} expenses={data.expenses} currency={currency} members={members} onEdit={openExpense} />
+            <History current={budget} previous={previous} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} onEdit={openExpense} />
           )}
           {tab === 'payments' && (
-            <Payments budget={budget} incomes={data.incomes} recurring={data.recurring} paid={data.paid} currency={currency} today={today}
+            <Payments budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} incomes={data.incomes} recurring={data.recurring} paid={data.paid} currency={currency} today={today}
               onEditRecurring={(item) => setSheet({ type: 'recurring', item })}
               onEditIncome={(item) => setSheet({ type: 'income', item })}
               onTogglePaid={togglePaid} />

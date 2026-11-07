@@ -4,7 +4,7 @@ import { CATEGORIES } from '../lib/categories.js';
 import { Segmented } from './ui.jsx';
 import { ExpenseRow } from './Today.jsx';
 
-export default function History({ current, previous, expenses, currency, members, onEdit }) {
+export default function History({ current, previous, monthMode, savings, expenses, currency, members, onEdit }) {
   const [which, setWhich] = useState('current');
   const budget = which === 'current' || !previous ? current : previous;
 
@@ -47,10 +47,29 @@ export default function History({ current, previous, expenses, currency, members
       <div className="summary" style={{ marginBottom: 16 }}>
         <div className="tile glass"><div className="k">Потрачено</div><div className="v">{money(budget.spentTotal, currency)}</div></div>
         <div className="tile glass">
-          <div className="k">{isCurrent ? 'Осталось' : 'Итог'}</div>
+          <div className="k">{isCurrent ? 'Осталось' : 'Итог месяца'}</div>
           <div className={`v ${budget.leftTotal < 0 ? 'neg' : 'pos'}`}>{floorMoney(budget.leftTotal, currency)}</div>
         </div>
+        {monthMode === 'carry' && Math.abs(budget.carryIn) >= 1 && (
+          <div className="tile glass wide">
+            <div className="k">Перенесено с прошлого месяца</div>
+            <div className={`v ${budget.carryIn > 0 ? 'pos' : 'neg'}`}>{money(Math.round(budget.carryIn), currency, { sign: true })}</div>
+          </div>
+        )}
+        {monthMode === 'savings' && (
+          <div className="tile glass wide">
+            <div className="k">🐷 Копилка</div>
+            <div className={`v ${savings < 0 ? 'neg' : 'pos'}`}>{money(Math.round(savings), currency)}</div>
+          </div>
+        )}
       </div>
+      {!isCurrent && (
+        <p className="footnote" style={{ marginTop: -6, marginBottom: 14 }}>
+          {monthMode === 'carry'
+            ? (budget.leftTotal >= 0 ? 'Этот остаток перенесён в текущий месяц.' : 'Этот перерасход вычтен из бюджета текущего месяца.')
+            : (budget.leftTotal >= 0 ? 'Этот остаток отложен в копилку.' : 'Этот перерасход вычтен из копилки.')}
+        </p>
+      )}
 
       <section className="card glass">
         <div className="chart" role="img" aria-label="Траты по дням" style={{ position: 'relative' }}>

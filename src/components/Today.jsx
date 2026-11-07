@@ -36,7 +36,7 @@ export function ExpenseRow({ e, currency, members, onEdit, showDay }) {
   );
 }
 
-export default function Today({ budget, expenses, currency, members, familyName, onAdd, onEdit, goPayments }) {
+export default function Today({ budget, monthMode, savings, expenses, currency, members, familyName, onAdd, onEdit, goPayments }) {
   const t = budget.today;
   const noBudget = budget.income <= 0;
   const left = t.left;
@@ -85,6 +85,13 @@ export default function Today({ budget, expenses, currency, members, familyName,
       <p className="footnote" style={{ marginTop: -6 }}>
         База {floorMoney(budget.dailyBase, currency)} в день. Неизрасходованное сегодня перейдёт на завтра.
         До конца периода {budget.daysLeft} {plural(budget.daysLeft, 'день', 'дня', 'дней')}, в запасе {floorMoney(budget.leftTotal, currency)}.
+        {monthMode === 'carry' && Math.abs(budget.carryIn) >= 1 && (
+          <> С прошлого месяца {budget.carryIn > 0 ? 'перенесено' : 'перенесён перерасход'}{' '}
+            <span className={budget.carryIn > 0 ? 'pos' : 'neg'}>{money(Math.round(budget.carryIn), currency, { sign: true })}</span> — уже учтено в базе.</>
+        )}
+        {monthMode === 'savings' && Math.abs(savings) >= 1 && (
+          <> В копилке <span className={savings >= 0 ? 'pos' : 'neg'}>{money(Math.round(savings), currency)}</span>.</>
+        )}
       </p>
 
       <div className="section-title">
