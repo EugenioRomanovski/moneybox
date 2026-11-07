@@ -71,20 +71,114 @@ export const useToast = () => useContext(ToastCtx);
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null);
   const timer = useRef();
-  const show = useCallback((text, kind = 'info') => {
+  // show(text, kind?, action?) — action: { label, onClick } adds a button (e.g. "Вернуть")
+  const show = useCallback((text, kind = 'info', action = null) => {
     clearTimeout(timer.current);
-    setToast({ text, kind, id: Date.now() });
-    timer.current = setTimeout(() => setToast(null), 2600);
+    setToast({ text, kind, action, id: Date.now() });
+    timer.current = setTimeout(() => setToast(null), action ? 5000 : 2600);
   }, []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
       {toast && (
-        <div key={toast.id} className={`toast glass ${toast.kind === 'error' ? 'danger' : ''}`} role="status" onClick={() => setToast(null)}>
+        <div key={toast.id} className={`toast glass ${toast.kind === 'error' ? 'danger' : ''}`} role="status" onClick={() => !toast.action && setToast(null)}>
           {toast.text}
+          {toast.action && (
+            <button className="toast-action" onClick={() => { setToast(null); toast.action.onClick(); }}>{toast.action.label}</button>
+          )}
         </div>
       )}
     </ToastCtx.Provider>
+  );
+}
+
+/* ───────── swipe-to-delete row (iOS style) ───────── */
+const ACTION_W = 88;
+let openRow = null; // only one row stays open at a time: { close() } of that row
+
+/**
+ * Swipe left to reveal "Удалить"; swipe far enough (or fast) to delete right away.
+ * Children is the row itself; taps on it still work when the row was not swiped.
+ */
+export function SwipeRow({ onDelete, label = 'Удалить', children }) {
+  const ref = useRef(null);
+  const st = useRef({ x0: 0, y0: 0, dx: 0, base: 0, lock: null, t0: 0, moved: false, open: false });
+  const [dx, setDx] = useState(0);
+  const [anim, setAnim] = useState(false);
+  const [gone, setGone] = useState(false);
+
+  const settle = (to) => { setAnim(true); setDx(to); st.current.open = to !== 0; };
+  const close = () => settle(0);
+  // stable identity of this row for the "one open row" registry (close() itself changes every render)
+  const self = useRef({});
+  self.current.close = close;
+
+  const remove = () => {
+    if (openRow === self.current) openRow = null;
+    setAnim(true);
+    setDx(-(ref.current?.offsetWidth || 400));
+    setGone(true);
+    navigator.vibrate?.(10);
+    setTimeout(async () => {
+      const ok = await onDelete();
+      if (ok === false) { setGone(false); settle(0); } // deletion failed: put the row back
+    }, 220);
+  };
+
+  const down = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (openRow && openRow !== self.current) { openRow.close(); openRow = null; }
+    Object.assign(st.current, { x0: e.clientX, y0: e.clientY, base: st.current.open ? -ACTION_W : 0, lock: null, t0: Date.now(), moved: false, dx: 0 });
+    st.current.active = true;
+  };
+  const move = (e) => {
+    const s = st.current;
+    if (!s.active) return;
+    const mx = e.clientX - s.x0;
+    const my = e.clientY - s.y0;
+    if (!s.lock) {
+      if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+      s.lock = Math.abs(mx) > Math.abs(my) ? 'x' : 'y';
+      if (s.lock === 'x') { ref.current.setPointerCapture?.(e.pointerId); setAnim(false); }
+    }
+    if (s.lock !== 'x') return;
+    s.moved = true;
+    let x = Math.min(0, s.base + mx);
+    const w = ref.current.offsetWidth;
+    if (x < -w * 0.85) x = -w * 0.85;
+    s.dx = x;
+    setDx(x);
+  };
+  const up = () => {
+    const s = st.current;
+    if (!s.active) return;
+    s.active = false;
+    if (s.lock !== 'x') return;
+    const w = ref.current.offsetWidth;
+    const fast = Date.now() - s.t0 < 250 && s.dx < -60;
+    if (s.dx < -w * 0.5) remove();
+    else if (s.dx < -ACTION_W / 2 || (fast && !s.open)) { settle(-ACTION_W); openRow = self.current; }
+    else close();
+  };
+  // a swipe must not turn into a tap that opens the editor
+  const clickCapture = (e) => {
+    if (st.current.moved) { e.stopPropagation(); e.preventDefault(); st.current.moved = false; return; }
+    if (st.current.open) { e.stopPropagation(); e.preventDefault(); close(); }
+  };
+
+  const reveal = Math.max(0, -dx);
+  return (
+    <div ref={ref} className={`swipe${gone ? ' gone' : ''}`}
+      onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div className="swipe-action" style={{ width: reveal, transition: anim ? 'width .22s ease' : 'none' }}>
+        <button type="button" onClick={remove} tabIndex={reveal ? 0 : -1} aria-label={label}
+          style={{ minWidth: ACTION_W }}>{label}</button>
+      </div>
+      <div className="swipe-content" onClickCapture={clickCapture}
+        style={{ transform: `translateX(${dx}px)`, transition: anim ? 'transform .22s ease' : 'none' }}>
+        {children}
+      </div>
+    </div>
   );
 }
 

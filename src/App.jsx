@@ -158,6 +158,36 @@ function Main({ user }) {
     }));
   });
 
+  // ───── swipe-to-delete with undo ─────
+  const swipeDeleteExpense = (e) => guard(async () => {
+    await q(supabase.from('mb_expenses').delete().eq('id', e.id));
+    setData((d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== e.id) }));
+    toast('Трата удалена', 'info', {
+      label: 'Вернуть',
+      onClick: () => guard(async () => {
+        const row = await q(supabase.from('mb_expenses').insert(e).select().single());
+        setData((d) => ({ ...d, expenses: [row, ...d.expenses].sort((a, b) => (b.spent_on + b.created_at).localeCompare(a.spent_on + a.created_at)) }));
+      }),
+    });
+  });
+
+  const swipeDeleteRow = (view, kind) => (item) => guard(async () => {
+    const marks = view === 'mb_recurring' ? data.paid.filter((p) => p.recurring_id === item.id) : [];
+    await q(supabase.from(view).delete().eq('id', item.id));
+    const key = view === 'mb_recurring' ? 'recurring' : 'incomes';
+    setData((d) => ({ ...d, [key]: d[key].filter((x) => x.id !== item.id) }));
+    toast(`${kind} «${item.title}» удалён`, 'info', {
+      label: 'Вернуть',
+      onClick: () => guard(async () => {
+        await q(supabase.from(view).insert(item));
+        if (marks.length) {
+          await q(supabase.from('mb_recurring_paid').insert(marks.map(({ recurring_id, period_start }) => ({ recurring_id, period_start, family_id: family.id }))));
+        }
+        await reload();
+      }),
+    });
+  });
+
   const openExpense = (item = null) => setSheet({ type: 'expense', item });
   const members = data.members;
 
@@ -167,16 +197,18 @@ function Main({ user }) {
         <>
           {tab === 'today' && (
             <Today budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} familyName={family.name}
-              onAdd={() => openExpense()} onEdit={openExpense} goPayments={() => setTab('payments')} />
+              onAdd={() => openExpense()} onEdit={openExpense} onDelete={swipeDeleteExpense} goPayments={() => setTab('payments')} />
           )}
           {tab === 'history' && (
-            <History current={budget} previous={previous} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} onEdit={openExpense} />
+            <History current={budget} previous={previous} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} onEdit={openExpense} onDelete={swipeDeleteExpense} />
           )}
           {tab === 'payments' && (
             <Payments budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} incomes={data.incomes} recurring={data.recurring} paid={data.paid} currency={currency} today={today}
               onEditRecurring={(item) => setSheet({ type: 'recurring', item })}
               onEditIncome={(item) => setSheet({ type: 'income', item })}
-              onTogglePaid={togglePaid} />
+              onTogglePaid={togglePaid}
+              onDeleteRecurring={swipeDeleteRow('mb_recurring', 'Платёж')}
+              onDeleteIncome={swipeDeleteRow('mb_incomes', 'Доход')} />
           )}
           {tab === 'family' && (
             <Family family={family} members={members} user={user} profileName={profileName}

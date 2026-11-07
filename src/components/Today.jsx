@@ -1,6 +1,6 @@
 import { money, floorMoney, timeOf, plural, dayTitle } from '../lib/format.js';
 import { category } from '../lib/categories.js';
-import { Avatar } from './ui.jsx';
+import { Avatar, SwipeRow } from './ui.jsx';
 
 function Ring({ spent, limit }) {
   const r = 100;
@@ -18,10 +18,10 @@ function Ring({ spent, limit }) {
   );
 }
 
-export function ExpenseRow({ e, currency, members, onEdit, showDay }) {
+export function ExpenseRow({ e, currency, members, onEdit, onDelete, showDay }) {
   const c = category(e.category);
   const who = members.length > 1 ? members.find((m) => m.user_id === e.user_id) : null;
-  return (
+  const row = (
     <button className="row" onClick={() => onEdit(e)}>
       <span className="icon" style={{ background: `${c.color}2e` }}>{c.emoji}</span>
       <div className="main">
@@ -34,9 +34,10 @@ export function ExpenseRow({ e, currency, members, onEdit, showDay }) {
       <div className="value">−{money(e.amount, currency)}</div>
     </button>
   );
+  return onDelete ? <SwipeRow onDelete={() => onDelete(e)}>{row}</SwipeRow> : row;
 }
 
-export default function Today({ budget, monthMode, savings, expenses, currency, members, familyName, onAdd, onEdit, goPayments }) {
+export default function Today({ budget, monthMode, savings, expenses, currency, members, familyName, onAdd, onEdit, onDelete, goPayments }) {
   const t = budget.today;
   const noBudget = budget.income <= 0;
   const left = t.left;
@@ -101,14 +102,14 @@ export default function Today({ budget, monthMode, savings, expenses, currency, 
       <div className="list glass">
         {todays.length === 0 ? (
           <div className="empty"><b>☀️</b>Сегодня ещё ничего не потрачено</div>
-        ) : todays.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} />)}
+        ) : todays.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} onDelete={onDelete} />)}
       </div>
 
       {recent.length > 0 && (
         <>
           <div className="section-title"><span>Недавние</span></div>
           <div className="list glass">
-            {recent.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} showDay />)}
+            {recent.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} onDelete={onDelete} showDay />)}
           </div>
         </>
       )}

@@ -1,7 +1,8 @@
 import { money, floorMoney, dayLong, dayShortFmt, plural } from '../lib/format.js';
 import { dueDateInPeriod, daysBetween } from '../lib/budget.js';
+import { SwipeRow } from './ui.jsx';
 
-export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid }) {
+export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid, onDeleteRecurring, onDeleteIncome }) {
   const period = budget.period;
   const paidSet = new Set(paid.filter((p) => p.period_start === period.start).map((p) => p.recurring_id));
   const active = recurring.filter((r) => r.active);
@@ -74,7 +75,8 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
           const s = status(r);
           const isPaid = paidSet.has(r.id);
           return (
-            <div className="row" key={r.id} style={{ opacity: r.active ? 1 : 0.5 }}>
+            <SwipeRow key={r.id} onDelete={() => onDeleteRecurring(r)}>
+            <div className="row" style={{ opacity: r.active ? 1 : 0.5 }}>
               <span className="icon">{r.emoji}</span>
               <button className="main" style={{ textAlign: 'left' }} onClick={() => onEditRecurring(r)}>
                 <div className="title">{r.title}</div>
@@ -87,6 +89,7 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
                 </button>
               )}
             </div>
+            </SwipeRow>
           );
         })}
       </div>
@@ -103,7 +106,8 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
           <div className="empty"><b>💰</b>Добавьте зарплату или другой ежемесячный доход</div>
         ) : (
           [...monthly, ...once].map((i) => (
-            <button className="row" key={i.id} onClick={() => onEditIncome(i)}>
+            <SwipeRow key={i.id} onDelete={() => onDeleteIncome(i)}>
+            <button className="row" onClick={() => onEditIncome(i)}>
               <span className="icon" style={{ background: 'rgba(52,199,89,.16)' }}>{i.kind === 'once' ? '🎁' : '💼'}</span>
               <div className="main">
                 <div className="title">{i.title}</div>
@@ -111,6 +115,7 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
               </div>
               <div className="value pos">+{money(i.amount, currency)}</div>
             </button>
+            </SwipeRow>
           ))
         )}
       </div>
