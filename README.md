@@ -45,11 +45,11 @@ URL и publishable key Supabase лежат в `src/config.js` (их можно �
 
 ## Деплой
 
-`.github/workflows/deploy.yml` собирает и публикует `dist/` на GitHub Pages при пуше в `main`
-(включите Settings → Pages → Source: GitHub Actions). Сборка использует относительные пути, поэтому
-работает и в подпапке, и на своём домене.
+Vercel (команда brainsome), проект `moneybox`, адрес **https://moneybox.brainsome.app**.
+Проект подключён к этому GitHub-репозиторию: пуш в `main` — продакшен, остальные ветки — превью.
+Настройки сборки — `vercel.json`.
 
-Чтобы ссылки из писем (подтверждение почты, сброс пароля) вели в приложение, добавьте его адрес в
-Supabase → Authentication → URL Configuration → Redirect URLs.
+Чтобы ссылки из писем (подтверждение почты, сброс пароля) вели в приложение, в Supabase →
+Authentication → URL Configuration → Redirect URLs должен быть `https://moneybox.brainsome.app/**`.
 
 На iPhone: откройте сайт в Safari → «Поделиться» → «На экран «Домой»».
