@@ -17,13 +17,13 @@ const Loader = () => <div className="loader"><div className="spinner" /></div>;
 
 export default function App() {
   const [session, setSession] = useState(undefined);
-  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+    const { data } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      // drop auth tokens from the address bar after signing in with the link from the letter
+      if (s && /access_token|error_code/.test(window.location.hash)) history.replaceState(null, '', window.location.pathname);
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -32,7 +32,7 @@ export default function App() {
     <ToastProvider>
       <Ambient />
       {session === undefined ? <Loader />
-        : !session || recovery ? <Auth recovery={recovery} onRecovered={() => setRecovery(false)} />
+        : !session ? <Auth />
           : <Main key={session.user.id} user={session.user} />}
     </ToastProvider>
   );
