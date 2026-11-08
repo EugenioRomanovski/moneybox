@@ -116,6 +116,15 @@ function Main({ user }) {
   };
   const close = () => setSheet(null);
 
+  // expenses move account balances on the server, so pick up the new balances afterwards
+  const refreshAccounts = async () => {
+    try {
+      const accounts = await q(supabase.from('mb_accounts').select('*').order('created_at'));
+      setData((d) => ({ ...d, accounts }));
+    } catch { /* realtime/next load will catch up */ }
+  };
+  const touchesAccount = (...ids) => ids.some(Boolean);
+
   const saveExpense = (fields) => guard(async () => {
     const item = sheet?.item;
     if (item) {
@@ -126,12 +135,14 @@ function Main({ user }) {
       setData((d) => ({ ...d, expenses: [row, ...d.expenses] }));
       navigator.vibrate?.(12);
     }
+    if (touchesAccount(fields.account_id, item?.account_id)) refreshAccounts();
     close();
   }, sheet?.item ? 'Сохранено' : 'Трата добавлена');
 
   const deleteExpense = (e) => guard(async () => {
     await q(supabase.from('mb_expenses').delete().eq('id', e.id));
     setData((d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== e.id) }));
+    if (touchesAccount(e.account_id)) refreshAccounts();
     close();
   }, 'Удалено');
 
@@ -162,11 +173,15 @@ function Main({ user }) {
   const swipeDeleteExpense = (e) => guard(async () => {
     await q(supabase.from('mb_expenses').delete().eq('id', e.id));
     setData((d) => ({ ...d, expenses: d.expenses.filter((x) => x.id !== e.id) }));
+    if (touchesAccount(e.account_id)) refreshAccounts();
     toast('Трата удалена', 'info', {
       label: 'Вернуть',
       onClick: () => guard(async () => {
-        const row = await q(supabase.from('mb_expenses').insert(e).select().single());
+        // the account may have been deleted meanwhile
+        const restored = { ...e, account_id: (data.accounts || []).some((a) => a.id === e.account_id) ? e.account_id : null };
+        const row = await q(supabase.from('mb_expenses').insert(restored).select().single());
         setData((d) => ({ ...d, expenses: [row, ...d.expenses].sort((a, b) => (b.spent_on + b.created_at).localeCompare(a.spent_on + a.created_at)) }));
+        if (touchesAccount(row.account_id)) refreshAccounts();
       }),
     });
   });
@@ -196,11 +211,11 @@ function Main({ user }) {
       {!ready ? <Loader /> : (
         <>
           {tab === 'today' && (
-            <Today budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} familyName={family.name}
+            <Today budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} accounts={data.accounts || []} familyName={family.name}
               onAdd={() => openExpense()} onEdit={openExpense} onDelete={swipeDeleteExpense} goPayments={() => setTab('payments')} />
           )}
           {tab === 'history' && (
-            <History current={budget} previous={previous} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} onEdit={openExpense} onDelete={swipeDeleteExpense} />
+            <History current={budget} previous={previous} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} expenses={data.expenses} currency={currency} members={members} accounts={data.accounts || []} onEdit={openExpense} onDelete={swipeDeleteExpense} />
           )}
           {tab === 'payments' && (
             <Payments budget={budget} monthMode={family.month_leftover_mode || 'carry'} savings={months.savings} incomes={data.incomes} recurring={data.recurring} paid={data.paid} currency={currency} today={today}
@@ -236,7 +251,7 @@ function Main({ user }) {
         <button className="fab glass" onClick={() => openExpense()} aria-label="Добавить трату"><IconPlus /></button>
       </nav>
 
-      <ExpenseSheet open={sheet?.type === 'expense'} expense={sheet?.item} currency={currency}
+      <ExpenseSheet open={sheet?.type === 'expense'} expense={sheet?.item} currency={currency} accounts={data.accounts || []}
         onClose={close} onSave={saveExpense} onDelete={deleteExpense} />
       <RecurringSheet open={sheet?.type === 'recurring'} item={sheet?.item} currency={currency}
         onClose={close} onSave={saveRow('mb_recurring')} onDelete={deleteRow('mb_recurring')} />
