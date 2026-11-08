@@ -150,7 +150,7 @@ function Main({ user }) {
     const item = sheet?.item;
     if (item) await q(supabase.from(view).update(fields).eq('id', item.id));
     else await q(supabase.from(view).insert({ ...fields, family_id: family.id }));
-    await reload();
+    await reload(); // also picks up account balances changed by one-off incomes
     close();
   }, 'Сохранено');
   const deleteRow = (view) => (item) => guard(async () => {
@@ -168,6 +168,21 @@ function Main({ user }) {
       paid: on ? [...d.paid, { recurring_id: r.id, period_start }] : d.paid.filter((p) => !(p.recurring_id === r.id && p.period_start === period_start)),
     }));
   });
+
+  // monthly income received this period: the mark credits the income's account on the server
+  const toggleReceived = (i, on) => guard(async () => {
+    const period_start = budget.period.start;
+    if (on) {
+      const row = await q(supabase.from('mb_incomes_received')
+        .insert({ income_id: i.id, period_start, family_id: family.id, account_id: i.account_id || null, amount: Number(i.amount) })
+        .select().single());
+      setData((d) => ({ ...d, received: [...(d.received || []), row] }));
+    } else {
+      await q(supabase.from('mb_incomes_received').delete().eq('income_id', i.id).eq('period_start', period_start));
+      setData((d) => ({ ...d, received: (d.received || []).filter((r) => !(r.income_id === i.id && r.period_start === period_start)) }));
+    }
+    if (i.account_id) refreshAccounts();
+  }, on && i.account_id ? 'Зачислено на счёт' : null);
 
   // ───── swipe-to-delete with undo ─────
   const swipeDeleteExpense = (e) => guard(async () => {
@@ -188,19 +203,27 @@ function Main({ user }) {
 
   const swipeDeleteRow = (view, kind) => (item) => guard(async () => {
     const marks = view === 'mb_recurring' ? data.paid.filter((p) => p.recurring_id === item.id) : [];
+    // money from received marks stays on the account when a monthly income is deleted,
+    // so marks come back without an account (nothing is credited twice)
+    const receivedMarks = view === 'mb_incomes' ? (data.received || []).filter((r) => r.income_id === item.id) : [];
     await q(supabase.from(view).delete().eq('id', item.id));
     const key = { mb_recurring: 'recurring', mb_incomes: 'incomes', mb_accounts: 'accounts' }[view];
     setData((d) => ({ ...d, [key]: (d[key] || []).filter((x) => x.id !== item.id) }));
     toast(`${kind} «${item.title}» удалён`, 'info', {
       label: 'Вернуть',
       onClick: () => guard(async () => {
-        await q(supabase.from(view).insert(item));
+        const accountGone = item.account_id && !(data.accounts || []).some((a) => a.id === item.account_id);
+        await q(supabase.from(view).insert(accountGone ? { ...item, account_id: null } : item));
+        if (receivedMarks.length) {
+          await q(supabase.from('mb_incomes_received').insert(receivedMarks.map(({ income_id, period_start, amount }) => ({ income_id, period_start, amount, account_id: null, family_id: family.id }))));
+        }
         if (marks.length) {
           await q(supabase.from('mb_recurring_paid').insert(marks.map(({ recurring_id, period_start }) => ({ recurring_id, period_start, family_id: family.id }))));
         }
         await reload();
       }),
     });
+    if (view !== 'mb_recurring') refreshAccounts();
   });
 
   const openExpense = (item = null) => setSheet({ type: 'expense', item });
@@ -222,6 +245,8 @@ function Main({ user }) {
               onEditRecurring={(item) => setSheet({ type: 'recurring', item })}
               onEditIncome={(item) => setSheet({ type: 'income', item })}
               onTogglePaid={togglePaid}
+              received={data.received || []}
+              onToggleReceived={toggleReceived}
               onDeleteRecurring={swipeDeleteRow('mb_recurring', 'Платёж')}
               onDeleteIncome={swipeDeleteRow('mb_incomes', 'Доход')}
               accounts={data.accounts || []}
@@ -255,7 +280,7 @@ function Main({ user }) {
         onClose={close} onSave={saveExpense} onDelete={deleteExpense} />
       <RecurringSheet open={sheet?.type === 'recurring'} item={sheet?.item} currency={currency}
         onClose={close} onSave={saveRow('mb_recurring')} onDelete={deleteRow('mb_recurring')} />
-      <IncomeSheet open={sheet?.type === 'income'} item={sheet?.item} currency={currency}
+      <IncomeSheet open={sheet?.type === 'income'} item={sheet?.item} currency={currency} accounts={data.accounts || []}
         onClose={close} onSave={saveRow('mb_incomes')} onDelete={deleteRow('mb_incomes')} />
       <AccountSheet open={sheet?.type === 'account'} item={sheet?.item} currency={currency}
         onClose={close} onSave={saveRow('mb_accounts')} onDelete={deleteRow('mb_accounts')} />

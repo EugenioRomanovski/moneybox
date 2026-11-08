@@ -8,6 +8,25 @@ import { ACCOUNT_KINDS } from '../lib/accounts.js';
 const toInput = (n) => (n ? String(Number(n)).replace('.', ',') : '');
 const parseAmount = (s) => Number(String(s).replace(/\s/g, '').replace(',', '.')) || 0;
 
+/** Row of account chips: «Без счёта» + the family's accounts. Hidden when there are no accounts. */
+function AccountPicker({ accounts, value, onChange, label, title }) {
+  if (!accounts.length) return null;
+  return (
+    <>
+      {title && <div className="field-label">{title}</div>}
+      <div className="chips account-chips" role="radiogroup" aria-label={label}>
+        <button type="button" role="radio" aria-checked={!value} className={`chip${!value ? ' on' : ''}`} onClick={() => onChange(null)}>Без счёта</button>
+        {accounts.map((a) => (
+          <button key={a.id} type="button" role="radio" aria-checked={value === a.id} className={`chip${value === a.id ? ' on' : ''}`} onClick={() => onChange(a.id)}>
+            {(ACCOUNT_KINDS[a.kind] || ACCOUNT_KINDS.debit).emoji} {a.title}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+const knownAccount = (accounts, id) => (id && accounts.some((a) => a.id === id) ? id : null);
+
 /* ───────── expense ───────── */
 export function ExpenseSheet({ open, expense, currency, accounts = [], onClose, onSave, onDelete }) {
   const amount = useAmount('');
@@ -24,9 +43,7 @@ export function ExpenseSheet({ open, expense, currency, accounts = [], onClose, 
     setNote(expense?.note || '');
     setDay(expense?.spent_on || todayISO());
     // new expense: the account used last time (if it still exists); existing one: its own account
-    const last = localStorage.getItem('moneybox-last-account');
-    const known = (id) => (id && accounts.some((a) => a.id === id) ? id : null);
-    setAccountId(expense ? known(expense.account_id) : known(last));
+    setAccountId(knownAccount(accounts, expense ? expense.account_id : localStorage.getItem('moneybox-last-account')));
     setBusy(false);
   }, [open, expense]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -85,16 +102,7 @@ export function ExpenseSheet({ open, expense, currency, accounts = [], onClose, 
         ))}
       </div>
 
-      {accounts.length > 0 && (
-        <div className="chips account-chips" role="radiogroup" aria-label="Счёт списания">
-          <button type="button" role="radio" aria-checked={!accountId} className={`chip${!accountId ? ' on' : ''}`} onClick={() => setAccountId(null)}>Без счёта</button>
-          {accounts.map((a) => (
-            <button key={a.id} type="button" role="radio" aria-checked={accountId === a.id} className={`chip${accountId === a.id ? ' on' : ''}`} onClick={() => setAccountId(a.id)}>
-              {(ACCOUNT_KINDS[a.kind] || ACCOUNT_KINDS.debit).emoji} {a.title}
-            </button>
-          ))}
-        </div>
-      )}
+      <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} label="Счёт списания" />
 
       <input className="input note-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Комментарий" maxLength={200} />
 
@@ -172,8 +180,9 @@ export function RecurringSheet({ open, item, currency, onClose, onSave, onDelete
 }
 
 /* ───────── income ───────── */
-export function IncomeSheet({ open, item, currency, onClose, onSave, onDelete }) {
+export function IncomeSheet({ open, item, currency, accounts = [], onClose, onSave, onDelete }) {
   const [title, setTitle] = useState('');
+  const [accountId, setAccountId] = useState(null);
   const [amount, setAmount] = useState('');
   const [kind, setKind] = useState('monthly');
   const [date, setDate] = useState(todayISO());
@@ -185,14 +194,20 @@ export function IncomeSheet({ open, item, currency, onClose, onSave, onDelete })
     setAmount(toInput(item?.amount));
     setKind(item?.kind || 'monthly');
     setDate(item?.received_on || todayISO());
+    setAccountId(item ? knownAccount(accounts, item.account_id) : knownAccount(accounts, localStorage.getItem('moneybox-last-income-account')));
     setBusy(false);
-  }, [open, item]);
+  }, [open, item]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const valid = title.trim() && parseAmount(amount) > 0;
   const save = async () => {
     if (!valid || busy) return;
     setBusy(true);
-    const ok = await onSave({ title: title.trim(), amount: parseAmount(amount), kind, received_on: kind === 'once' ? date : null });
+    const fields = { title: title.trim(), amount: parseAmount(amount), kind, received_on: kind === 'once' ? date : null };
+    if (accounts.length || item?.account_id) {
+      fields.account_id = accountId;
+      localStorage.setItem('moneybox-last-income-account', accountId || '');
+    }
+    const ok = await onSave(fields);
     if (!ok) setBusy(false);
   };
 
@@ -212,10 +227,14 @@ export function IncomeSheet({ open, item, currency, onClose, onSave, onDelete })
           <input className="input" type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
         </label>
       )}
+      <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} label="Счёт зачисления" title="Счёт зачисления" />
       <p className="footnote" style={{ margin: '4px 4px 14px' }}>
         {kind === 'monthly'
           ? 'Ежемесячный доход распределяется на все дни бюджетного периода.'
           : 'Разовый доход увеличивает бюджет того периода, в который он поступил.'}
+        {accountId && (kind === 'monthly'
+          ? ' Когда деньги придут, отметьте доход галочкой в списке — сумма зачислится на счёт.'
+          : ' Сумма сразу зачислится на выбранный счёт.')}
       </p>
       <button className="btn" disabled={!valid || busy} onClick={save}>{item ? 'Сохранить' : 'Добавить доход'}</button>
       {item && (

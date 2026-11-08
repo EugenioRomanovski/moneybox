@@ -3,7 +3,7 @@ import { dueDateInPeriod, daysBetween } from '../lib/budget.js';
 import { SwipeRow } from './ui.jsx';
 import { ACCOUNT_KINDS, accountTotals } from '../lib/accounts.js';
 
-export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid, onDeleteRecurring, onDeleteIncome, accounts = [], onEditAccount, onDeleteAccount }) {
+export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid, received = [], onToggleReceived, onDeleteRecurring, onDeleteIncome, accounts = [], onEditAccount, onDeleteAccount }) {
   const period = budget.period;
   const paidSet = new Set(paid.filter((p) => p.period_start === period.start).map((p) => p.recurring_id));
   const active = recurring.filter((r) => r.active);
@@ -11,6 +11,8 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
   const fixedSum = active.reduce((s, r) => s + Number(r.amount), 0);
   const once = incomes.filter((i) => i.kind === 'once' && i.received_on >= period.start && i.received_on < period.end);
   const monthly = incomes.filter((i) => i.kind !== 'once');
+  const receivedSet = new Set(received.filter((r) => r.period_start === period.start).map((r) => r.income_id));
+  const accountTitle = (id) => accounts.find((a) => a.id === id)?.title;
 
   const totals = accountTotals(accounts);
   const kindOrder = { debit: 0, savings: 1, credit: 2 };
@@ -152,18 +154,29 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
         {monthly.length + once.length === 0 ? (
           <div className="empty"><b>💰</b>Добавьте зарплату или другой ежемесячный доход</div>
         ) : (
-          [...monthly, ...once].map((i) => (
+          [...monthly, ...once].map((i) => {
+            const acc = accountTitle(i.account_id);
+            const isMonthly = i.kind !== 'once';
+            const got = receivedSet.has(i.id);
+            const sub = isMonthly ? (got ? 'получено в этом периоде' : 'каждый месяц') : `разово · ${dayLong(i.received_on)}`;
+            return (
             <SwipeRow key={i.id} onDelete={() => onDeleteIncome(i)}>
-            <button className="row" onClick={() => onEditIncome(i)}>
-              <span className="icon" style={{ background: 'rgba(52,199,89,.16)' }}>{i.kind === 'once' ? '🎁' : '💼'}</span>
-              <div className="main">
+            <div className="row">
+              <span className="icon" style={{ background: 'rgba(52,199,89,.16)' }}>{isMonthly ? '💼' : '🎁'}</span>
+              <button className="main" style={{ textAlign: 'left' }} onClick={() => onEditIncome(i)}>
                 <div className="title">{i.title}</div>
-                <div className="subtitle">{i.kind === 'once' ? `разово · ${dayLong(i.received_on)}` : 'каждый месяц'}</div>
-              </div>
-              <div className="value pos">+{money(i.amount, currency)}</div>
-            </button>
+                <div className={`subtitle${got ? ' pos' : ''}`}>{sub}{acc ? ` · ${acc}` : ''}</div>
+              </button>
+              <button className="value pos" onClick={() => onEditIncome(i)}>+{money(i.amount, currency)}</button>
+              {isMonthly && (got || acc) && (
+                <button className={`check${got ? ' on' : ''}`} aria-label={got ? 'Отметить неполученным' : 'Отметить полученным'} onClick={() => onToggleReceived(i, !got)}>
+                  {got ? '✓' : ''}
+                </button>
+              )}
+            </div>
             </SwipeRow>
-          ))
+            );
+          })
         )}
       </div>
     </div>
