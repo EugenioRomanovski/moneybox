@@ -1,8 +1,9 @@
 import { money, floorMoney, dayLong, dayShortFmt, plural } from '../lib/format.js';
 import { dueDateInPeriod, daysBetween } from '../lib/budget.js';
 import { SwipeRow } from './ui.jsx';
+import { ACCOUNT_KINDS, accountTotals } from '../lib/accounts.js';
 
-export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid, onDeleteRecurring, onDeleteIncome }) {
+export default function Payments({ budget, monthMode, savings, incomes, recurring, paid, currency, today, onEditRecurring, onEditIncome, onTogglePaid, onDeleteRecurring, onDeleteIncome, accounts = [], onEditAccount, onDeleteAccount }) {
   const period = budget.period;
   const paidSet = new Set(paid.filter((p) => p.period_start === period.start).map((p) => p.recurring_id));
   const active = recurring.filter((r) => r.active);
@@ -10,6 +11,10 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
   const fixedSum = active.reduce((s, r) => s + Number(r.amount), 0);
   const once = incomes.filter((i) => i.kind === 'once' && i.received_on >= period.start && i.received_on < period.end);
   const monthly = incomes.filter((i) => i.kind !== 'once');
+
+  const totals = accountTotals(accounts);
+  const kindOrder = { debit: 0, savings: 1, credit: 2 };
+  const sortedAccounts = [...accounts].sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]);
 
   const status = (r) => {
     if (!r.active) return { text: `${r.day_of_month}-го · на паузе`, cls: 'muted' };
@@ -30,6 +35,48 @@ export default function Payments({ budget, monthMode, savings, incomes, recurrin
         </div>
       </header>
 
+      <section className="card glass" style={{ padding: '18px 20px' }}>
+        <div className="muted" style={{ fontSize: 13 }}>Общий баланс средств</div>
+        <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.5, margin: '2px 0 10px', fontVariantNumeric: 'tabular-nums' }}
+          className={totals.total < 0 ? 'neg' : ''}>{money(totals.total, currency)}</div>
+        <div className="stats" style={{ marginTop: 0 }}>
+          <div className="stat"><div className="k">На счетах</div><div className="v">{floorMoney(totals.debit, currency)}</div></div>
+          <div className="stat"><div className="k">Накопления</div><div className="v pos">{floorMoney(totals.savings, currency)}</div></div>
+          <div className="stat"><div className="k">Долг</div><div className={`v ${totals.debt > 0 ? 'neg' : ''}`}>{totals.debt > 0 ? '−' : ''}{floorMoney(totals.debt, currency)}</div></div>
+        </div>
+      </section>
+
+      <div className="section-title" style={{ marginTop: 6 }}>
+        <span>Счета</span>
+        <button onClick={() => onEditAccount(null)}>Добавить</button>
+      </div>
+      <div className="list glass">
+        {sortedAccounts.length === 0 ? (
+          <div className="empty"><b>💳</b>Добавьте карты, вклады и кредитки — здесь появится общий баланс</div>
+        ) : sortedAccounts.map((a) => {
+          const k = ACCOUNT_KINDS[a.kind] || ACCOUNT_KINDS.debit;
+          const credit = a.kind === 'credit';
+          const sub = credit && a.credit_limit != null
+            ? `доступно ${floorMoney(Math.max(0, Number(a.credit_limit) - Number(a.balance)), currency)} из ${floorMoney(a.credit_limit, currency)}`
+            : k.label;
+          return (
+            <SwipeRow key={a.id} onDelete={() => onDeleteAccount(a)}>
+              <button className="row" onClick={() => onEditAccount(a)}>
+                <span className="icon" style={{ background: `${k.color}26` }}>{k.emoji}</span>
+                <div className="main">
+                  <div className="title">{a.title}</div>
+                  <div className="subtitle">{sub}</div>
+                </div>
+                <div className={`value ${credit && Number(a.balance) > 0 ? 'neg' : Number(a.balance) < 0 ? 'neg' : ''}`}>
+                  {credit && Number(a.balance) > 0 ? '−' : ''}{money(a.balance, currency)}
+                </div>
+              </button>
+            </SwipeRow>
+          );
+        })}
+      </div>
+
+      <div className="section-title" style={{ marginTop: 22 }}><span>Бюджет периода</span></div>
       <div className="summary">
         <div className="tile glass"><div className="k">Доходы</div><div className="v pos">{money(budget.income, currency)}</div></div>
         <div className="tile glass"><div className="k">Обязательные</div><div className="v">{money(fixedSum, currency)}</div></div>

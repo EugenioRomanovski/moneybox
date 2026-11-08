@@ -10,7 +10,7 @@ import Today from './components/Today.jsx';
 import History from './components/History.jsx';
 import Payments from './components/Payments.jsx';
 import Family from './components/Family.jsx';
-import { ExpenseSheet, RecurringSheet, IncomeSheet } from './components/Sheets.jsx';
+import { ExpenseSheet, RecurringSheet, IncomeSheet, AccountSheet } from './components/Sheets.jsx';
 
 const Ambient = () => <div className="ambient" aria-hidden="true"><i /><i /><i /></div>;
 const Loader = () => <div className="loader"><div className="spinner" /></div>;
@@ -174,8 +174,8 @@ function Main({ user }) {
   const swipeDeleteRow = (view, kind) => (item) => guard(async () => {
     const marks = view === 'mb_recurring' ? data.paid.filter((p) => p.recurring_id === item.id) : [];
     await q(supabase.from(view).delete().eq('id', item.id));
-    const key = view === 'mb_recurring' ? 'recurring' : 'incomes';
-    setData((d) => ({ ...d, [key]: d[key].filter((x) => x.id !== item.id) }));
+    const key = { mb_recurring: 'recurring', mb_incomes: 'incomes', mb_accounts: 'accounts' }[view];
+    setData((d) => ({ ...d, [key]: (d[key] || []).filter((x) => x.id !== item.id) }));
     toast(`${kind} «${item.title}» удалён`, 'info', {
       label: 'Вернуть',
       onClick: () => guard(async () => {
@@ -208,7 +208,10 @@ function Main({ user }) {
               onEditIncome={(item) => setSheet({ type: 'income', item })}
               onTogglePaid={togglePaid}
               onDeleteRecurring={swipeDeleteRow('mb_recurring', 'Платёж')}
-              onDeleteIncome={swipeDeleteRow('mb_incomes', 'Доход')} />
+              onDeleteIncome={swipeDeleteRow('mb_incomes', 'Доход')}
+              accounts={data.accounts || []}
+              onEditAccount={(item) => setSheet({ type: 'account', item })}
+              onDeleteAccount={swipeDeleteRow('mb_accounts', 'Счёт')} />
           )}
           {tab === 'family' && (
             <Family family={family} members={members} user={user} profileName={profileName}
@@ -239,6 +242,8 @@ function Main({ user }) {
         onClose={close} onSave={saveRow('mb_recurring')} onDelete={deleteRow('mb_recurring')} />
       <IncomeSheet open={sheet?.type === 'income'} item={sheet?.item} currency={currency}
         onClose={close} onSave={saveRow('mb_incomes')} onDelete={deleteRow('mb_incomes')} />
+      <AccountSheet open={sheet?.type === 'account'} item={sheet?.item} currency={currency}
+        onClose={close} onSave={saveRow('mb_accounts')} onDelete={deleteRow('mb_accounts')} />
     </>
   );
 }

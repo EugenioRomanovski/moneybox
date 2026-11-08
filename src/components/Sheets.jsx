@@ -205,3 +205,77 @@ export function IncomeSheet({ open, item, currency, onClose, onSave, onDelete })
     </Sheet>
   );
 }
+
+/* ───────── account ───────── */
+export function AccountSheet({ open, item, currency, onClose, onSave, onDelete }) {
+  const [kind, setKind] = useState('debit');
+  const [title, setTitle] = useState('');
+  const [balance, setBalance] = useState('');
+  const [limit, setLimit] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setKind(item?.kind || 'debit');
+    setTitle(item?.title || '');
+    setBalance(item ? String(Number(item.balance)).replace('.', ',') : '');
+    setLimit(item?.credit_limit != null ? String(Number(item.credit_limit)).replace('.', ',') : '');
+    setBusy(false);
+  }, [open, item]);
+
+  const isCredit = kind === 'credit';
+  // debit accounts may be in overdraft, so a leading minus is allowed there
+  const parseSigned = (s) => {
+    const neg = /^\s*[-−]/.test(s);
+    const v = parseAmount(s.replace(/[-−]/g, ''));
+    return neg && kind === 'debit' ? -v : v;
+  };
+  const valid = title.trim() && balance.trim() !== '';
+  const save = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    const ok = await onSave({
+      title: title.trim(),
+      kind,
+      balance: parseSigned(balance),
+      credit_limit: isCredit && limit.trim() ? parseAmount(limit) : null,
+      updated_at: new Date().toISOString(),
+    });
+    if (!ok) setBusy(false);
+  };
+  const clean = (v) => v.replace(/[^\d.,\s\-−]/g, '');
+
+  return (
+    <Sheet open={open} onClose={onClose} title={item ? 'Счёт' : 'Новый счёт'}>
+      <div style={{ margin: '4px 0 14px' }}>
+        <Segmented value={kind} onChange={setKind} options={[
+          { value: 'debit', label: 'Дебетовый' },
+          { value: 'savings', label: 'Накопительный' },
+          { value: 'credit', label: 'Кредитный' },
+        ]} />
+      </div>
+      <label className="field"><span>Название</span>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80}
+          placeholder={isCredit ? 'Кредитка, рассрочка…' : kind === 'savings' ? 'Вклад, накопительный счёт…' : 'Карта, наличные…'} />
+      </label>
+      <label className="field"><span>{isCredit ? `Задолженность, ${currencySymbol(currency)}` : `Остаток, ${currencySymbol(currency)}`}</span>
+        <input className="input" inputMode="decimal" value={balance} onChange={(e) => setBalance(clean(e.target.value))} placeholder="0" />
+      </label>
+      {isCredit && (
+        <label className="field"><span>Кредитный лимит, {currencySymbol(currency)} — необязательно</span>
+          <input className="input" inputMode="decimal" value={limit} onChange={(e) => setLimit(clean(e.target.value))} placeholder="Например, 150 000" />
+        </label>
+      )}
+      <p className="footnote" style={{ margin: '4px 4px 14px' }}>
+        {isCredit
+          ? 'Сколько вы должны банку. Долг вычитается из общего баланса.'
+          : 'Сколько денег на счёте сейчас. Обновляйте остаток, когда он заметно меняется.'}
+      </p>
+      <button className="btn" disabled={!valid || busy} onClick={save}>{item ? 'Сохранить' : 'Добавить счёт'}</button>
+      {item && (
+        <button className="btn danger" style={{ marginTop: 10 }} disabled={busy}
+          onClick={async () => { if (confirm(`Удалить «${item.title}»?`)) { setBusy(true); await onDelete(item); } }}>Удалить</button>
+      )}
+    </Sheet>
+  );
+}
