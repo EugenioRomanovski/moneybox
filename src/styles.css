@@ -370,3 +370,4 @@ select.input { background-image: linear-gradient(45deg, transparent 50%, var(--l
 
 /* account the expense is paid from */
 .account-chips { margin: 10px 0 2px; }
+.field-label { font-size: 13px; color: var(--label-2); margin: 10px 4px 0; }

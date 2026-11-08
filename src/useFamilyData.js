@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, q } from './supabase.js';
 import { addDays, periodFor } from './lib/budget.js';
 
-const EMPTY = { incomes: [], recurring: [], paid: [], expenses: [], members: [], dailyTotals: [], accounts: [], since: null };
+const EMPTY = { incomes: [], recurring: [], paid: [], expenses: [], members: [], dailyTotals: [], accounts: [], received: [], since: null };
 const cacheKey = (fid) => `moneybox-data-${fid}`;
 
 function readCache(fid) {
@@ -22,7 +22,7 @@ export function useFamilyData(family, today) {
     // current + previous budget period (for history)
     const since = addDays(periodFor(today, family.period_start_day).start, -40);
     try {
-      const [incomes, recurring, paid, expenses, members, dailyTotals, accounts] = await Promise.all([
+      const [incomes, recurring, paid, expenses, members, dailyTotals, accounts, received] = await Promise.all([
         q(supabase.from('mb_incomes').select('*').order('created_at')),
         q(supabase.from('mb_recurring').select('*').order('day_of_month').order('created_at')),
         q(supabase.from('mb_recurring_paid').select('*').gte('period_start', since)),
@@ -33,9 +33,10 @@ export function useFamilyData(family, today) {
         q(supabase.from('mb_daily_totals').select('spent_on,amount').lt('spent_on', since).order('spent_on').limit(10000))
           .catch(() => []),
         q(supabase.from('mb_accounts').select('*').order('created_at')).catch(() => []),
+        q(supabase.from('mb_incomes_received').select('*').gte('period_start', since)).catch(() => []),
       ]);
       if (my !== seq.current) return;
-      const next = { incomes, recurring, paid, expenses, members, dailyTotals, accounts, since };
+      const next = { incomes, recurring, paid, expenses, members, dailyTotals, accounts, received, since };
       setData(next);
       setError(null);
       try { localStorage.setItem(cacheKey(fid), JSON.stringify(next)); } catch { /* quota */ }
@@ -65,7 +66,7 @@ export function useFamilyData(family, today) {
     let t;
     const bump = () => { clearTimeout(t); t = setTimeout(load, 350); };
     const ch = supabase.channel(`moneybox-${fid}`);
-    for (const table of ['expenses', 'incomes', 'recurring', 'recurring_paid', 'accounts']) {
+    for (const table of ['expenses', 'incomes', 'recurring', 'recurring_paid', 'accounts', 'incomes_received']) {
       ch.on('postgres_changes', { event: '*', schema: 'moneybox', table, filter: `family_id=eq.${fid}` }, bump);
     }
     ch.subscribe();
