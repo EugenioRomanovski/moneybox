@@ -3,14 +3,16 @@ import { Sheet, Keypad, AmountDisplay, useAmount, Switch, Segmented, currencySym
 import { CATEGORIES, RECURRING_EMOJI } from '../lib/categories.js';
 import { today as todayISO, dayLong } from '../lib/format.js';
 import { addDays } from '../lib/budget.js';
+import { ACCOUNT_KINDS } from '../lib/accounts.js';
 
 const toInput = (n) => (n ? String(Number(n)).replace('.', ',') : '');
 const parseAmount = (s) => Number(String(s).replace(/\s/g, '').replace(',', '.')) || 0;
 
 /* ───────── expense ───────── */
-export function ExpenseSheet({ open, expense, currency, onClose, onSave, onDelete }) {
+export function ExpenseSheet({ open, expense, currency, accounts = [], onClose, onSave, onDelete }) {
   const amount = useAmount('');
   const [cat, setCat] = useState('food');
+  const [accountId, setAccountId] = useState(null);
   const [note, setNote] = useState('');
   const [day, setDay] = useState(todayISO());
   const [busy, setBusy] = useState(false);
@@ -21,6 +23,10 @@ export function ExpenseSheet({ open, expense, currency, onClose, onSave, onDelet
     setCat(expense?.category || localStorage.getItem('moneybox-last-cat') || 'food');
     setNote(expense?.note || '');
     setDay(expense?.spent_on || todayISO());
+    // new expense: the account used last time (if it still exists); existing one: its own account
+    const last = localStorage.getItem('moneybox-last-account');
+    const known = (id) => (id && accounts.some((a) => a.id === id) ? id : null);
+    setAccountId(expense ? known(expense.account_id) : known(last));
     setBusy(false);
   }, [open, expense]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -42,7 +48,10 @@ export function ExpenseSheet({ open, expense, currency, onClose, onSave, onDelet
     if (!amount.number || busy) return;
     setBusy(true);
     localStorage.setItem('moneybox-last-cat', cat);
-    const ok = await onSave({ amount: amount.number, category: cat, note: note.trim() || null, spent_on: day });
+    if (accounts.length) localStorage.setItem('moneybox-last-account', accountId || '');
+    const fields = { amount: amount.number, category: cat, note: note.trim() || null, spent_on: day };
+    if (accounts.length || expense?.account_id) fields.account_id = accountId;
+    const ok = await onSave(fields);
     if (!ok) setBusy(false);
   };
 
@@ -75,6 +84,17 @@ export function ExpenseSheet({ open, expense, currency, onClose, onSave, onDelet
           </button>
         ))}
       </div>
+
+      {accounts.length > 0 && (
+        <div className="chips account-chips" role="radiogroup" aria-label="Счёт списания">
+          <button type="button" role="radio" aria-checked={!accountId} className={`chip${!accountId ? ' on' : ''}`} onClick={() => setAccountId(null)}>Без счёта</button>
+          {accounts.map((a) => (
+            <button key={a.id} type="button" role="radio" aria-checked={accountId === a.id} className={`chip${accountId === a.id ? ' on' : ''}`} onClick={() => setAccountId(a.id)}>
+              {(ACCOUNT_KINDS[a.kind] || ACCOUNT_KINDS.debit).emoji} {a.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       <input className="input note-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Комментарий" maxLength={200} />
 

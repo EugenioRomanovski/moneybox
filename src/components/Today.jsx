@@ -18,8 +18,9 @@ function Ring({ spent, limit }) {
   );
 }
 
-export function ExpenseRow({ e, currency, members, onEdit, onDelete, showDay }) {
+export function ExpenseRow({ e, currency, members, accounts = [], onEdit, onDelete, showDay }) {
   const c = category(e.category);
+  const acc = e.account_id ? accounts.find((a) => a.id === e.account_id) : null;
   const who = members.length > 1 ? members.find((m) => m.user_id === e.user_id) : null;
   const row = (
     <button className="row" onClick={() => onEdit(e)}>
@@ -27,7 +28,7 @@ export function ExpenseRow({ e, currency, members, onEdit, onDelete, showDay }) 
       <div className="main">
         <div className="title">{e.note || c.name}</div>
         <div className="subtitle">
-          {e.note ? `${c.name} · ` : ''}{showDay ? dayTitle(e.spent_on) : timeOf(e.created_at)}{who ? ` · ${who.display_name}` : ''}
+          {e.note ? `${c.name} · ` : ''}{showDay ? dayTitle(e.spent_on) : timeOf(e.created_at)}{acc ? ` · ${acc.title}` : ''}{who ? ` · ${who.display_name}` : ''}
         </div>
       </div>
       {who && <Avatar name={who.display_name} url={who.avatar_url} size={24} />}
@@ -37,7 +38,7 @@ export function ExpenseRow({ e, currency, members, onEdit, onDelete, showDay }) 
   return onDelete ? <SwipeRow onDelete={() => onDelete(e)}>{row}</SwipeRow> : row;
 }
 
-export default function Today({ budget, monthMode, savings, expenses, currency, members, familyName, onAdd, onEdit, onDelete, goPayments }) {
+export default function Today({ budget, monthMode, savings, expenses, currency, members, accounts, familyName, onAdd, onEdit, onDelete, goPayments }) {
   const t = budget.today;
   const noBudget = budget.income <= 0;
   const left = t.left;
@@ -102,14 +103,14 @@ export default function Today({ budget, monthMode, savings, expenses, currency, 
       <div className="list glass">
         {todays.length === 0 ? (
           <div className="empty"><b>☀️</b>Сегодня ещё ничего не потрачено</div>
-        ) : todays.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} onDelete={onDelete} />)}
+        ) : todays.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} accounts={accounts} onEdit={onEdit} onDelete={onDelete} />)}
       </div>
 
       {recent.length > 0 && (
         <>
           <div className="section-title"><span>Недавние</span></div>
           <div className="list glass">
-            {recent.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} onDelete={onDelete} showDay />)}
+            {recent.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} accounts={accounts} onEdit={onEdit} onDelete={onDelete} showDay />)}
           </div>
         </>
       )}

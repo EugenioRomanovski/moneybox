@@ -4,7 +4,7 @@ import { CATEGORIES } from '../lib/categories.js';
 import { Segmented } from './ui.jsx';
 import { ExpenseRow } from './Today.jsx';
 
-export default function History({ current, previous, monthMode, savings, expenses, currency, members, onEdit, onDelete }) {
+export default function History({ current, previous, monthMode, savings, expenses, currency, members, accounts, onEdit, onDelete }) {
   const [which, setWhich] = useState('current');
   const budget = which === 'current' || !previous ? current : previous;
 
@@ -120,7 +120,7 @@ export default function History({ current, previous, monthMode, savings, expense
             </div>
             {items.length > 0 && (
               <div className="list glass">
-                {items.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} onEdit={onEdit} onDelete={onDelete} />)}
+                {items.map((e) => <ExpenseRow key={e.id} e={e} currency={currency} members={members} accounts={accounts} onEdit={onEdit} onDelete={onDelete} />)}
               </div>
             )}
           </div>
